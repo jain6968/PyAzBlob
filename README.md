@@ -30,6 +30,8 @@ This repository has two branches, with two implementations of the application:
 
 The asynchronous version offers best performance, especially for small files in big number. The two implementations have smaller differences: the async version requires a [_Shared Access Signature (SAS)_](https://docs.microsoft.com/en-us/azure/storage/storage-dotnet-shared-access-signature-part-1) from a storage account, whereas the sync version requires _storage account name and an administrative key_.
 
+Performance tests showed the asynchronous version to be about 7 times faster than the synchronous implementation; using a single thread in both cases.
+
 ## This branch
 This branch (**async**) contains the event based implementation, using Python 3.4 > built-in Asynchronous I/O framework, called [asyncio](https://docs.python.org/3/library/asyncio.html), and its HTTP client/server implementation, called [aiohttp](http://aiohttp.readthedocs.io/en/stable/), to implement an event based bulk uploader using Azure Blob Storage REST api.
 
