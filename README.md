@@ -2,7 +2,7 @@
 Python tool to upload files into Azure Storage Blob Service from local file system.
 
 ## Disclaimer
-[AzCopy](https://docs.microsoft.com/en-us/azure/storage/storage-use-azcopy) is the official tool from Microsoft that, among many other things, offers bulk upload of files from local file system to Azure Storage Blob Service. PyAzBlob is a simple console application created in a few hours, mostly for fun and to practice with [Microsoft Azure Storage SDK for Python](https://github.com/Azure/azure-storage-python). However, it does implement a couple of features that I find useful for my personal use, that are not available in AzCopy.
+[AzCopy](https://docs.microsoft.com/en-us/azure/storage/storage-use-azcopy) is the official tool from Microsoft that, among many other things, offers bulk upload of files from local file system to Azure Storage Blob Service. PyAzBlob is a simple console application created in a few hours, mostly for fun. However, it does implement a couple of features that I find useful for my personal use, that are not available in AzCopy.
 
 ```
   _____                     ____  _       _                
