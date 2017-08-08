@@ -11,6 +11,7 @@
 import re
 import base64
 from datetime import datetime
+from core.literature import Scribe
 
 
 __all__ = ["httpdate", "upload"]
@@ -48,8 +49,7 @@ def prepare_for_blob(text):
     return without_padding + str(l)
 
 
-
-async def upload(session, sema, url, file_path, file_name, mime_type, metadata=None):
+async def upload(session, sema, url, file_path, file_name, mime_type, metadata=None, files_log=None):
     utc_now = datetime.utcnow()
     headers = {
         "Date": httpdate(utc_now),
@@ -66,15 +66,21 @@ async def upload(session, sema, url, file_path, file_name, mime_type, metadata=N
                 headers["x-ms-meta-" + k] = prepare_for_blob(v)
 
     with await sema:
-        print("[*] Uploading.. ", file_name)
+        print("[*] Uploading: {}".format(file_name))
 
         with open(file_path, "rb") as file_bin:
 
-            async with session.put(url, data=file_bin, headers=headers) as response:
-                if response.status == 201:
-                    # success
-                    print("[*] Uploaded: {} {}".format(file_name, response.status))
-                else:
-                    # something wrong
-                    text = await response.text()
-                    print("[*] Failed: {} {}. Details: {}".format(file_name, response.status, text))
+            try:
+                async with session.put(url, data=file_bin, headers=headers) as response:
+                    if response.status == 201:
+                        # success
+                        print("[*] Uploaded: {} {}".format(file_name, response.status))
+                    else:
+                        # something wrong
+                        text = await response.text()
+                        print("[*] Failed: {} {}. Details: {}".format(file_name, response.status, text))
+            except Exception as ex:
+                print("[*] Error while uploading file: " + file_name + " - " + str(ex))
+            else:
+                # add line to file containing list of uploaded files
+                Scribe.add_lines([file_path], files_log)

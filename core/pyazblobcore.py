@@ -19,10 +19,11 @@ from core.configuration import config
 from core.literature import Scribe
 from core.exceptions import ArgumentNullException, InvalidArgument, MissingDependency, ConfigurationError
 from core.pyazblobupload import upload
+from core.diagnostics import StopWatch
 
 __all__ = ["pyazupload"]
 
-# I am a kind person..
+
 try:
     import asyncio
 except ImportError:
@@ -172,7 +173,8 @@ async def job(session,
               cut_path,
               ignored=None,
               recurse=False,
-              force=False):
+              force=False,
+              files_log=None):
 
     sema = asyncio.BoundedSemaphore(100)
 
@@ -194,15 +196,6 @@ async def job(session,
         file_name = path_leaf(file_path)
         mime_type = mimetypes.guess_type(file_path)[0]
 
-        """
-        # TODO: log uploaded files
-        except Exception as ex:
-            print("[*] Error while uploading file: " + item_path + " - " + str(ex))
-        else:
-            # add line to file containing list of uploaded files
-            Scribe.add_lines([item_path], files_log)
-        """
-
         url = "https://" + account_name + ".blob.core.windows.net/" + container_name + "/" + blob_name + sas
         tasks.append(upload(session,
                             sema,
@@ -210,7 +203,8 @@ async def job(session,
                             file_path,
                             file_name,
                             mime_type,
-                            None))
+                            None,
+                            files_log))
 
     if tasks:
         await asyncio.wait(tasks)
@@ -260,12 +254,16 @@ def pyazupload(root_path,
         "User-Agent": "Python aiohttp"
     }
 
-    with aiohttp.ClientSession(loop=loop, headers=headers) as session:
-        loop.run_until_complete(job(session,
-                                    p,
-                                    files_uploaded_previously,
-                                    ignored_paths,
-                                    cut_path,
-                                    recurse=recurse))
+    with StopWatch() as sw:
+        with aiohttp.ClientSession(loop=loop, headers=headers) as session:
+            loop.run_until_complete(job(session,
+                                        p,
+                                        files_uploaded_previously,
+                                        ignored_paths,
+                                        cut_path,
+                                        recurse=recurse,
+                                        files_log=files_log))
+
+        print("[*] Elapsed: {0:.2f}s".format(sw.elapsed_s))
 
     loop.close()

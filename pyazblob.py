@@ -24,7 +24,7 @@ banner = """
          __/ |                                             
         |___/                                              
                                                            
-  PyAzBlob | Azure Blob Service Bulk Uploader.             
+  PyAzBlob | Azure Blob Service Bulk Uploader (async)      
   Written by Roberto Prevato <roberto.prevato@gmail.com>   
                                                            
 ==========================================================="""
@@ -44,7 +44,7 @@ import argparse
 from core.exceptions import ArgumentNullException, InvalidArgument, MissingDependency, ConfigurationError
 
 
-parser = argparse.ArgumentParser(description="PyAzBlob | Azure Blob Service Bulk Uploader",
+parser = argparse.ArgumentParser(description="PyAzBlob | Azure Blob Service Bulk Uploader (async)",
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog="{}\n{}".format("author: Roberto Prevato roberto.prevato@gmail.com", separator))
 
