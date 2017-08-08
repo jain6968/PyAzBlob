@@ -83,7 +83,7 @@ Configure a _Shared Access Signature_ in file `settings.ini` or, alternatively, 
 * [Create a Storage Account](https://docs.microsoft.com/en-us/azure/storage/storage-create-storage-account)
 * [Blob Storage Account pricing](https://azure.microsoft.com/en-us/pricing/details/storage/blobs/)
 
-Storage account name and settings can be found in the Azure Portal under `Settings > Access keys`.
+A Storage account shared access signature can be generated in the Azure Portal under `Settings > Shared access signature`.
 
 ![Azure Storage Settings](https://gist.githubusercontent.com/RobertoPrevato/9ff1fc2fe8acf15bbbe6094a836697f8/raw/0d100871f2233e0ea415ab21a8546330a8703534/azure-storage-sas.png)
 
