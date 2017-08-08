@@ -106,8 +106,8 @@ python pyazblob.py -p C:\Users\username\Documents\ -c C:\Users\username\
 * define ignored file paths (Unix-style globs) using `.pyazblobignore` file
 * define Azure Storage key, name and destination container name using `settings.ini` file, or following environmental variables
 
-| Name                | Scope          |
-|---------------------|----------------|
-| PYAZ_ACCOUNT_NAME   | account name   |
-| PYAZ_ACCOUNT_KEY    | account key    |
-| PYAZ_CONTAINER_NAME | container name |
+| Name                | Scope                              |
+|---------------------|------------------------------------|
+| PYAZ_ACCOUNT_NAME   | account name                       |
+| PYAZ_ACCOUNT_SAS    | account shared access signature    |
+| PYAZ_CONTAINER_NAME | container name                     |

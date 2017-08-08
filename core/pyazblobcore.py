@@ -11,42 +11,46 @@
 import re
 import os
 import errno
+import ntpath
 import fnmatch
 import mimetypes
-import time
 from pathlib import Path
 from core.configuration import config
 from core.literature import Scribe
 from core.exceptions import ArgumentNullException, InvalidArgument, MissingDependency, ConfigurationError
+from core.pyazblobupload import upload
 
 __all__ = ["pyazupload"]
 
 # I am a kind person..
 try:
-    from azure.storage.blob import BlockBlobService, ContentSettings
+    import asyncio
 except ImportError:
-    raise MissingDependency("azure-storage")
+    raise MissingDependency("asyncio")
 
 
-# load configuration
-storage_config = config["StorageAccount"]
+try:
+    import aiohttp
+except ImportError:
+    raise MissingDependency("aiohttp")
 
-if not storage_config:
+
+if not config:
     raise ConfigurationError("missing StorageAccount configuration")
 
-account_name = storage_config["name"]
-account_key = storage_config["key"]
-container_name = storage_config["container"]
+account_name = config.account_name
+sas = config.account_sas
+container_name = config.container_name
 
 
-if not account_key and not account_name:
+if not sas and not account_name:
     raise ConfigurationError("missing Storage Account configuration")
 
 if not account_name:
     raise ConfigurationError("missing Storage Account name configuration")
 
-if not account_key:
-    raise ConfigurationError("missing Storage Account key configuration")
+if not sas:
+    raise ConfigurationError("missing Storage Account shared access signature configuration")
 
 if not container_name:
     raise ConfigurationError("missing Storage Account destination container name configuration")
@@ -80,29 +84,6 @@ def load_ignored():
     return read_lines_strip_comments(str(ignore_file))
 
 
-def pyazupload_file(file_path, blob_name, block_blob_service):
-    file_mime = mimetypes.guess_type(file_path)[0]
-
-    print("[*] Uploading {} ({})".format(file_path, file_mime))
-
-    # avoid "<no-name>"" folders:
-    while "//" in blob_name:
-        blob_name = blob_name.replace("//", "/")
-
-    while "\\\\" in blob_name:
-        blob_name = blob_name.replace("\\\\", "\\")
-
-    while blob_name.startswith("\\"):
-        blob_name = blob_name[1:]
-
-    block_blob_service.create_blob_from_path(
-        container_name,
-        blob_name,
-        file_path,
-        content_settings=ContentSettings(content_type=file_mime)
-        )
-
-
 def ensure_folder(path):
     try:
         os.makedirs(path)
@@ -117,26 +98,132 @@ ensure_folder("logs")
 files_log = os.path.join("logs", "-".join([account_name, container_name.replace("\\", "_").replace("/", "_"), "files.log"]))
 
 
+end_sentinel = object()
+
+
+def get_paths(p,
+              files_uploaded_previously,
+              ignored_paths,
+              cut_path,
+              ignored=None,
+              recurse=False,
+              force=False):
+    # get files;
+    items = (x for x in p.iterdir())
+
+    for item in items:
+        item_path = str(item)
+
+        if os.path.islink(item_path):
+            continue
+
+        if item_path in files_uploaded_previously:
+            print("[*] Skipping... " + item_path)
+            continue
+
+        if any(fnmatch.fnmatch(item_path, x) for x in ignored_paths):
+            print("[*] Ignoring... " + item_path)
+            continue
+
+        # if the item is a folder, and work is recursive; go to its children
+        if item.is_dir():
+            if not recurse:
+                continue
+            else:
+                # upload children;
+                yield from get_paths(Path(item_path),
+                                     files_uploaded_previously,
+                                     ignored_paths,
+                                     cut_path,
+                                     ignored,
+                                     recurse,
+                                     force)
+        blob_name = paths_prefix + item_path[len(cut_path):]
+
+        yield {
+          "item_path": item_path,
+          "blob_name": fix_blob_name(blob_name)
+        }
+
+
+def path_leaf(path):
+    head, tail = ntpath.split(path)
+    return tail or ntpath.basename(head)
+
+
+def fix_blob_name(blob_name):
+    # avoid "<no-name>"" folders:
+    while "//" in blob_name:
+        blob_name = blob_name.replace("//", "/")
+
+    while "\\\\" in blob_name:
+        blob_name = blob_name.replace("\\\\", "\\")
+
+    while blob_name.startswith("\\") or blob_name.startswith("/"):
+        blob_name = blob_name[1:]
+
+    return blob_name
+
+
+async def job(session,
+              p,
+              files_uploaded_previously,
+              ignored_paths,
+              cut_path,
+              ignored=None,
+              recurse=False,
+              force=False):
+
+    sema = asyncio.BoundedSemaphore(100)
+
+    tasks = []
+
+    for item in get_paths(p,
+                          files_uploaded_previously,
+                          ignored_paths,
+                          cut_path,
+                          ignored=ignored,
+                          recurse=recurse,
+                          force=force):
+        file_path = item.get("item_path")
+
+        if os.path.isdir(file_path):
+            continue
+
+        blob_name = item.get("blob_name")
+        file_name = path_leaf(file_path)
+        mime_type = mimetypes.guess_type(file_path)[0]
+
+        """
+        # TODO: log uploaded files
+        except Exception as ex:
+            print("[*] Error while uploading file: " + item_path + " - " + str(ex))
+        else:
+            # add line to file containing list of uploaded files
+            Scribe.add_lines([item_path], files_log)
+        """
+
+        url = "https://" + account_name + ".blob.core.windows.net/" + container_name + "/" + blob_name + sas
+        tasks.append(upload(session,
+                            sema,
+                            url,
+                            file_path,
+                            file_name,
+                            mime_type,
+                            None))
+
+    if tasks:
+        await asyncio.wait(tasks)
+
+
 def pyazupload(root_path,
                cut_path=None,
                ignored=None,
                recurse=False,
-               force=False,
-               sleep=None,
-               block_blob_service=None):
-    """
-    Bulk uploads files found under the given directory inside a configured Azure Storage Blob Service.
-    
-    :param root_path: root path from which bulk upload should start.
-    :param cut_path: portion of root path to cut from uploaded blobs.
-    :param ignored: ignored paths.
-    :param recurse: whether to recursively upload files in subfolders.
-    :param force: whether to force re-upload of files that were uploaded in a previous run (from files.log).
-    :param block_blob_service: block blob service to use when uploading files.
-    """
+               force=False):
     if not ignored:
         ignored = []
-       
+
     if force:
         files_uploaded_previously = []
         Scribe.write("", files_log)
@@ -145,16 +232,6 @@ def pyazupload(root_path,
             files_uploaded_previously = Scribe.read_lines(files_log)
         except FileNotFoundError:
             files_uploaded_previously = []
-
-    if not block_blob_service:
-        try:
-            block_blob_service = BlockBlobService(account_name=account_name,
-                                                  account_key=account_key)
-
-            # create container (if it already exists, nothing bad happens)
-            block_blob_service.create_container(container_name)
-        except Exception as ex:
-            raise RuntimeError("Cannot obtain instance of BlockBlobService. Error details: {}".format(ex))
 
     if not root_path:
         raise ArgumentNullException("root_path")
@@ -173,50 +250,22 @@ def pyazupload(root_path,
             raise InvalidArgument("root_path must start with given cut_path")
     else:
         cut_path = root_path
-    
+
     # read ignored files
     ignored_paths = load_ignored() + ignored
 
-    # get files;
-    items = (x for x in p.iterdir())
-    for item in items:
-        item_path = str(item)
+    loop = asyncio.get_event_loop()
 
-        if item_path in files_uploaded_previously:
-            print("[*] Skipping... " + item_path)
-            continue
+    headers = {
+        "User-Agent": "Python aiohttp"
+    }
 
-        if any(fnmatch.fnmatch(item_path, x) for x in ignored_paths):
-            print("[*] Ignoring... " + item_path)
-            continue
+    with aiohttp.ClientSession(loop=loop, headers=headers) as session:
+        loop.run_until_complete(job(session,
+                                    p,
+                                    files_uploaded_previously,
+                                    ignored_paths,
+                                    cut_path,
+                                    recurse=recurse))
 
-        # if the item is a folder, and work is recursive; go to its children
-        if item.is_dir():
-            if not recurse:
-                continue
-            else:
-                # upload children;
-                pyazupload(item_path,
-                           cut_path,
-                           ignored,
-                           recurse,
-                           False,
-                           sleep,
-                           block_blob_service)
-                continue
-
-        try:
-            blob_name = paths_prefix + item_path[len(cut_path):]
-          
-            pyazupload_file(item_path, blob_name, block_blob_service)
-        except Exception as ex:
-            print("[*] Error while uploading file: " + item_path + " - " + str(ex))
-        else:
-            # add line to file containing list of uploaded files
-            Scribe.add_lines([item_path], files_log)
-
-            if sleep and sleep > 1:
-                # sleep between uploads
-                time.sleep(sleep / 1000.0)
-
-
+    loop.close()

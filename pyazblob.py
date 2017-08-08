@@ -63,9 +63,6 @@ parser.add_argument("-r", "--recurse", dest="recurse", required=False, action="s
 parser.add_argument("-f", "--force", dest="force", required=False, action="store_true", default=False,
                     help="whether to force re-upload of files that were uploaded in a previous run (from files.log).")
 
-parser.add_argument("-s", "--sleep", dest="sleep", required=False, default=-1,
-                    help="sleep time in milliseconds, between uploads (default no sleep)")
-
 parser.add_argument("--nobanner", dest="nobanner", required=False, action="store_true", default=False,
                     help="whether to disable the banner with ascii art.")
 
@@ -82,8 +79,7 @@ if __name__ == "__main__":
                    options.cut_path,
                    options.ignoredpath,
                    options.recurse,
-                   options.force,
-                   options.sleep)
+                   options.force)
 
     except MissingDependency as mde:
         sep_print(str(mde))
